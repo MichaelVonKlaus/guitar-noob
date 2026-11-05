@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Guitar Noob</title>
+<style>
+  :root { --bg:#15161a; --panel:#1f2026; --line:#3a3c46; --text:#e8e8ee; --muted:#8a8c98; --accent:#e0523c; --ok:#4caf7a; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, sans-serif; background:var(--bg); color:var(--text); padding:16px; max-width:760px; margin-inline:auto; }
+  h1 { font-size:1.4rem; margin:0 0 12px; }
+  h2 { font-size:1.05rem; margin:0 0 10px; color:var(--accent); }
+  section { background:var(--panel); border-radius:12px; padding:14px; margin-bottom:16px; }
+  button { background:#2a2c35; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px 12px; cursor:pointer; font-size:0.9rem; }
+  button:hover { border-color:var(--accent); }
+  button:disabled { opacity:0.5; cursor:default; }
+  input, select { background:#15161a; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px; font-size:0.9rem; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .muted { color:var(--muted); font-size:0.85rem; }
+  .ex { display:flex; align-items:center; gap:10px; padding:6px 0; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  .ex:last-child { border-bottom:none; }
+  .ex input[type=checkbox] { width:18px; height:18px; accent-color:var(--ok); }
+  .ex.done span.txt { text-decoration:line-through; color:var(--muted); }
+  .bar { height:8px; background:#2a2c35; border-radius:4px; overflow:hidden; margin:8px 0; }
+  .bar > div { height:100%; background:var(--ok); width:0; transition:width 0.3s; }
+  .beat { width:22px; height:22px; border-radius:50%; background:#2a2c35; border:1px solid var(--line); }
+  .beat.on { background:var(--accent); }
+  .beat.first.on { background:var(--ok); }
+  .dot { transition: all 0.35s ease; }
+  @keyframes pulse { 0%,100% { r:14; opacity:1; } 50% { r:18; opacity:0.6; } }
+  .pulse { animation: pulse 1.1s ease-in-out infinite; }
+  @keyframes press {
+    0%   { transform: translateY(-14px) scale(1.25); }
+    70%  { transform: translateY(2px) scale(0.95); }
+    100% { transform: translateY(0) scale(1); }
+  }
+  .press { animation: press 0.45s ease-out; transform-box: fill-box; transform-origin: center; }
+</style>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#15161a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Guitar Noob">
+<link rel="apple-touch-icon" href="icon-192.png">
+<script>
+  if ("serviceWorker" in navigator) { navigator.serviceWorker.register("sw.js"); }
+</script>
+</head>
+<body>
+
+<div class="row" style="justify-content:space-between;margin-bottom:8px">
+  <h1 id="title"></h1>
+  <select id="langSelect" aria-label="Language">
+    <option value="ro">Română</option>
+    <option value="en">English</option>
+    <option value="no">Norsk</option>
+  </select>
+</div>
+
+<!-- GRIFUL -->
+<section>
+  <h2 id="t_fret"></h2>
+  <div class="row" style="margin-bottom:10px">
+    <select id="chordSelect"></select>
+    <button id="playChordBtn"></button>
+    <button id="demoBtn"></button>
+    <span class="muted" id="chordInfo"></span>
+  </div>
+  <svg id="fretboard" viewBox="0 0 600 260" style="width:100%;height:auto;display:block"></svg>
+  <p class="muted" style="margin:10px 0 2px">Mâna, de sus (schemă): 1 = index, 2 = mijlociu, 3 = inelar, 4 = mic</p>
+  <svg id="handSvg" viewBox="0 0 600 150" style="width:100%;height:auto;display:block"></svg>
+  <p id="handTip" style="margin:8px 0 0;font-size:0.95rem"></p>
+  <p class="muted" id="t_fretHelp" style="margin:8px 0 0"></p>
+</section>
+
+<!-- VERIFICARE -->
+<section>
+  <h2 id="t_check"></h2>
+  <div class="row" style="margin-bottom:8px">
+    <button id="micBtn"></button>
+    <span id="inputIndicator" class="muted" style="display:inline-flex;align-items:center;gap:6px">
+      <span id="inputDot" style="width:10px;height:10px;border-radius:50%;background:#3a3c46;display:inline-block"></span>
+      <span id="inputText"></span>
+    </span>
+    <span class="muted"><span id="t_target"></span> <b id="targetName"></b></span>
+  </div>
+  <div id="bars" style="display:grid;grid-template-columns:repeat(12,1fr);gap:4px;height:90px;align-items:end"></div>
+  <div id="barLabels" class="muted" style="display:grid;grid-template-columns:repeat(12,1fr);gap:4px;text-align:center"></div>
+  <p id="status" style="margin:10px 0 0;font-weight:600;min-height:1.4em"></p>
+  <p class="muted" id="t_checkNote" style="margin:6px 0 0"></p>
+</section>
+
+<!-- METRONOM -->
+<section>
+  <h2 id="t_metro"></h2>
+  <div class="row">
+    <button id="metroToggle"></button>
+    <label class="muted"><span id="t_bpm"></span>
+      <input type="number" id="bpm" value="60" min="30" max="220" style="width:80px">
+    </label>
+    <div class="row" id="beats"></div>
+  </div>
+  <p class="muted" id="t_metroNote"></p>
+</section>
+
+<!-- TRASEU -->
+<section>
+  <h2 id="t_path"></h2>
+  <div class="bar"><div id="progressBar"></div></div>
+  <p class="muted" id="progressText" style="margin:0 0 8px"></p>
+  <div id="exercises"></div>
+  <div class="row" style="margin-top:12px">
+    <button id="exportBtn"></button>
+    <button id="importBtn"></button>
+    <button id="resetBtn"></button>
+  </div>
+</section>
+
+<!-- RITMUL TAU -->
+<section>
+  <h2>Ritmul tău</h2>
+  <p class="muted" style="margin-top:0">Unu, doi, trei, patru, unu, trei, patru, la 60 BPM. E5 cade pe fiecare bătaie din ritm, tăcere pe bătaia a șasea.</p>
+  <div class="row">
+    <button id="patternBtn">Arată ritmul</button>
+    <span class="muted" id="patternInfo"></span>
+  </div>
+</section>
+
+<!-- SESIUNI -->
+<section>
+  <h2 id="t_sessions"></h2>
+  <div id="sessions"></div>
+</section>
+
+<!-- PIESE PROPRII -->
+<section>
+  <h2 id="t_songs"></h2>
+  <p class="muted" id="t_songsNote" style="margin-top:0"></p>
+  <div class="row" style="margin-bottom:8px">
+    <input id="songName" style="flex:1;min-width:140px">
+  </div>
+  <div class="row" style="margin-bottom:8px">
+    <input id="songChords" style="flex:1;min-width:200px">
+    <button id="saveSongBtn"></button>
+  </div>
+  <div id="songList"></div>
+</section>
+
+<script>
+/* ---------- TRADUCERI ---------- */
+const T = {
+  ro: {
+    title: "Guitar Noob", fret: "Griful", playAnim: "Animație pas cu pas", demo: "Ascultă acordul (demo)",
+    fretHelp: "X = coardă nesunată, O = coardă liberă, 1-5 = pe ce fret apeși. Punctele pulsează pe degetele care trebuie puse.",
+    check: "Verificare cu microfonul", mic: "Pornește microfonul", micOff: "Oprește microfonul", noInput: "Fără intrare", inputOn: "Intrare sunet activă",
+    target: "Acord țintă:", noSound: "Nu se aude nimic. Cântă sau mărește volumul.", correct: "Pare corect: {c}. Verifică și cu urechea.",
+    missing: "Lipsesc notele: {n}. Verifică degetele.", extra: "Note în plus: {n}. Verifică corzile care nu trebuie sunate.",
+    checkNote: "Verificarea e o estimare: cu distorsiune mare sau zgomot poate greși. Cântă curat, la volum normal, cu microfonul aproape de amplificator.",
+    metro: "Metronom", bpm: "BPM", metroNote: "Prima bătaie e verde. Web Audio poate avea mici întârzieri pe Bluetooth.",
+    path: "Traseu și progres", progress: "{d} din {t} exerciții ({p}%)", exportB: "Export progres", importB: "Import progres", resetB: "Resetează",
+    verify: "Verifică live", verifying: "Se verifică...", verified: "Pare corect (estimare)", notVerified: "Nu pare corect, încearcă din nou",
+    songs: "Piesele tale", songsNote: "Introdu manual acordurile unei piese, din partitura ta. Aplicația nu conține acorduri de piese comerciale.",
+    songName: "Numele piesei", songChords: "Acorduri separate prin spațiu, ex: E5 A5 D5 G5", save: "Salvează", show: "Arată", del: "Șterge",
+    unknown: "Acorduri necunoscute: {u}", resetConfirm: "Ștergi tot progresul?", invalid: "Fișier invalid.",
+    micErr: "Nu pot accesa microfonul. Pornește printr-un server local și permite microfonul în browser.",
+    stages: ["Etapa 1: power chords", "Etapa 2: palm muting", "Etapa 3: acorduri deschise", "Etapa 4: riff-uri simple", "Capitolul 5: ritm și tempo", "Capitolul 6: progresii mai complexe"],
+    items: [
+      ["E5, 4 bătăi pe fiecare, 60 BPM", "E5"], ["A5, 4 bătăi pe fiecare, 60 BPM", "A5"], ["E5 A5 D5 G5 fără opriri, 60 BPM", null], ["Același exercițiu la 80 BPM", null],
+      ["E5 cu palm muting, sunet scurt", "E5"], ["Alternează muted și liber pe aceeași notă", null], ["Riff de 8 bătăi cu palm muting, 70 BPM", null],
+      ["Em, Am, E, A, fiecare 4 bătăi", null], ["D, Dm, G, C, fiecare 4 bătăi", null], ["Trecere între două acorduri sub o secundă", null],
+      ["Riff din E5 cu opt bătăi, 70 BPM", null], ["Piesa ta introdusă manual, primele 8 bare", null],
+      ["E5 pe 8 bătăi, alternând palm muting și sunet liber, 90 BPM", null], ["E5 A5 E5 D5, 4 bătăi pe fiecare, 90 BPM", null], ["G5 D5 A5 E5, 4 bătăi pe fiecare, 100 BPM", null],
+      ["Am, Em, G, C, 4 bătăi pe fiecare, 80 BPM", null], ["E, A, D, E, 4 bătăi pe fiecare, 90 BPM", null], ["Riff de 16 bătăi cu palm muting, E5 A5 E5 D5, 110 BPM", null]
+    ]
+  },
+  en: {
+    title: "Guitar Noob", fret: "Fretboard", playAnim: "Step-by-step animation", demo: "Play chord (demo)",
+    fretHelp: "X = string not played, O = open string, 1-5 = fret pressed. Dots pulse on the fingers to place.",
+    check: "Microphone check", mic: "Start microphone", micOff: "Stop microphone", noInput: "No input", inputOn: "Sound input active",
+    target: "Target chord:", noSound: "No sound. Play or raise the volume.", correct: "Looks correct: {c}. Check by ear too.",
+    missing: "Missing notes: {n}. Check your fingers.", extra: "Extra notes: {n}. Check strings that should not ring.",
+    checkNote: "This check is an estimate: heavy distortion or noise can mislead it. Play clean, at normal volume, with the mic close to the amp.",
+    metro: "Metronome", bpm: "BPM", metroNote: "First beat is green. Web Audio may have slight delay over Bluetooth.",
+    path: "Path and progress", progress: "{d} of {t} exercises ({p}%)", exportB: "Export progress", importB: "Import progress", resetB: "Reset",
+    verify: "Verify live", verifying: "Checking...", verified: "Looks correct (estimate)", notVerified: "Doesn't look correct, try again",
+    songs: "Your songs", songsNote: "Enter the chords of a song manually from your own sheet. The app ships no chords of commercial songs.",
+    songName: "Song name", songChords: "Chords separated by spaces, e.g. E5 A5 D5 G5", save: "Save", show: "Show", del: "Delete",
+    unknown: "Unknown chords: {u}", resetConfirm: "Delete all progress?", invalid: "Invalid file.",
+    micErr: "Cannot access the microphone. Run it from a local server and allow the mic in the browser.",
+    stages: ["Stage 1: power chords", "Stage 2: palm muting", "Stage 3: open chords", "Stage 4: simple riffs", "Chapter 5: rhythm and tempo", "Chapter 6: more complex progressions"],
+    items: [
+      ["E5, 4 beats each, 60 BPM", "E5"], ["A5, 4 beats each, 60 BPM", "A5"], ["E5 A5 D5 G5 without stopping, 60 BPM", null], ["Same exercise at 80 BPM", null],
+      ["E5 with palm muting, short sound", "E5"], ["Alternate muted and open on the same note", null], ["8-beat riff with palm muting, 70 BPM", null],
+      ["Em, Am, E, A, 4 beats each", null], ["D, Dm, G, C, 4 beats each", null], ["Change between two chords in under a second", null],
+      ["E5 riff with eight beats, 70 BPM", null], ["Your song entered manually, first 8 bars", null],
+      ["E5 for 8 beats, alternating palm muting and open sound, 90 BPM", null], ["E5 A5 E5 D5, 4 beats each, 90 BPM", null], ["G5 D5 A5 E5, 4 beats each, 100 BPM", null],
+      ["Am, Em, G, C, 4 beats each, 80 BPM", null], ["E, A, D, E, 4 beats each, 90 BPM", null], ["16-beat riff with palm muting, E5 A5 E5 D5, 110 BPM", null]
+    ]
+  },
+  no: {
+    title: "Guitar Noob", fret: "Gripebrettet", playAnim: "Trinn-for-trinn-animasjon", demo: "Hør akkorden (demo)",
+    fretHelp: "X = streng som ikke spilles, O = åpen streng, 1-5 = hvilken bånd du trykker. Prikkene pulserer der fingrene skal settes.",
+    check: "Mikrofonkontroll", mic: "Start mikrofon", micOff: "Stopp mikrofon", noInput: "Ingen lyd", inputOn: "Lydinngang aktiv",
+    target: "Målakkord:", noSound: "Ingen lyd. Spill eller øk volumet.", correct: "Ser riktig ut: {c}. Sjekk også med øret.",
+    missing: "Manglende toner: {n}. Sjekk fingrene.", extra: "Ekstra toner: {n}. Sjekk strenger som ikke skal klinge.",
+    checkNote: "Kontrollen er et anslag: sterk forvrengning eller støy kan lure den. Spill rent, med normalt volum og mikrofonen nær forsterkeren.",
+    metro: "Metronom", bpm: "BPM", metroNote: "Første slag er grønt. Web Audio kan ha liten forsinkelse over Bluetooth.",
+    path: "Øvelsesløype og fremdrift", progress: "{d} av {t} øvelser ({p}%)", exportB: "Eksporter fremdrift", importB: "Importer fremdrift", resetB: "Nullstill",
+    verify: "Sjekk live", verifying: "Sjekker...", verified: "Ser riktig ut (anslag)", notVerified: "Ser ikke riktig ut, prøv igjen",
+    songs: "Dine låter", songsNote: "Skriv inn akkordene til en låt manuelt fra ditt eget notat. Appen inneholder ingen akkorder fra kommersielle låter.",
+    songName: "Låtnavn", songChords: "Akkorder adskilt med mellomrom, f.eks. E5 A5 D5 G5", save: "Lagre", show: "Vis", del: "Slett",
+    unknown: "Ukjente akkorder: {u}", resetConfirm: "Slette all fremdrift?", invalid: "Ugyldig fil.",
+    micErr: "Kan ikke få tilgang til mikrofonen. Kjør via en lokal server og tillat mikrofon i nettleseren.",
+    stages: ["Trinn 1: power chords", "Trinn 2: palm muting", "Trinn 3: åpne akkorder", "Trinn 4: enkle riff", "Kapittel 5: rytme og tempo", "Kapittel 6: mer komplekse progresjoner"],
+    items: [
+      ["E5, 4 slag hver, 60 BPM", "E5"], ["A5, 4 slag hver, 60 BPM", "A5"], ["E5 A5 D5 G5 uten stopp, 60 BPM", null], ["Samme øvelse på 80 BPM", null],
+      ["E5 med palm muting, kort lyd", "E5"], ["Veksle mellom dempet og åpen på samme tone", null], ["8-slags riff med palm muting, 70 BPM", null],
+      ["Em, Am, E, A, 4 slag hver", null], ["D, Dm, G, C, 4 slag hver", null], ["Bytt mellom to akkorder på under ett sekund", null],
+      ["E5-riff med åtte slag, 70 BPM", null], ["Din låt lagt inn manuelt, første 8 takter", null],
+      ["E5 i 8 slag, vekslende palm muting og åpen lyd, 90 BPM", null], ["E5 A5 E5 D5, 4 slag hver, 90 BPM", null], ["G5 D5 A5 E5, 4 slag hver, 100 BPM", null],
+      ["Am, Em, G, C, 4 slag hver, 80 BPM", null], ["E, A, D, E, 4 slag hver, 90 BPM", null], ["16-slags riff med palm muting, E5 A5 E5 D5, 110 BPM", null]
+    ]
+  }
+};
+
+let LANG = localStorage.getItem("gt-lang") || "ro";
+const t = (key, vars = {}) => {
+  let s = (T[LANG][key] ?? T.ro[key] ?? key);
+  for (const k in vars) s = s.replace(`{${k}}`, vars[k]);
+  return s;
+};
+
+/* ---------- ACORDURI ---------- */
+// Ordinea corzilor: E grava, A, D, G, B, E subțire. null = corda nu se cântă.
+const CHORDS = {
+  "E5":  { frets:[0,2,2,null,null,null],   fingers:[null,1,1,null,null,null] },
+  "A5":  { frets:[null,0,2,2,null,null],   fingers:[null,null,1,1,null,null] },
+  "D5":  { frets:[null,null,0,2,3,null],   fingers:[null,null,null,1,2,null] },
+  "G5":  { frets:[3,5,5,null,null,null],   fingers:[1,3,4,null,null,null] },
+  "E":   { frets:[0,2,2,1,0,0],            fingers:[null,2,3,1,null,null] },
+  "Em":  { frets:[0,2,2,0,0,0],            fingers:[null,2,3,null,null,null] },
+  "A":   { frets:[null,0,2,2,2,0],         fingers:[null,null,1,2,3,null] },
+  "Am":  { frets:[null,0,2,2,1,0],         fingers:[null,null,2,3,1,null] },
+  "D":   { frets:[null,null,0,2,3,2],      fingers:[null,null,null,1,3,2] },
+  "Dm":  { frets:[null,null,0,2,3,1],      fingers:[null,null,null,2,3,1] },
+  "G":   { frets:[3,2,0,0,0,3],            fingers:[3,2,null,null,null,4] },
+  "C":   { frets:[null,3,2,0,1,0],         fingers:[null,3,2,null,1,null] }
+};
+
+/* ---------- GRIFUL ---------- */
+const svg = document.getElementById("fretboard");
+const NS = "http://www.w3.org/2000/svg";
+const X0 = 60, X_GAP = 90, Y0 = 40, Y_GAP = 36, FRETS = 5;
+const STR_X = i => X0 + i * X_GAP;
+const FRET_Y = f => Y0 + f * Y_GAP;
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function drawBoard() {
+  svg.innerHTML = "";
+  el("rect", { x:STR_X(0)-8, y:Y0-6, width:STR_X(5)-STR_X(0)+16, height:8, fill:"#c9c9d1", rx:2 }, svg);
+  for (let f = 1; f <= FRETS; f++) {
+    el("line", { x1:STR_X(0)-8, x2:STR_X(5)+8, y1:FRET_Y(f), y2:FRET_Y(f), stroke:"#3a3c46", "stroke-width":2 }, svg);
+    el("text", { x:STR_X(0)-30, y:FRET_Y(f-1)+Y_GAP/2+4, fill:"#8a8c98", "font-size":12, "text-anchor":"middle" }, svg).textContent = f;
+  }
+  const names = ["E","A","D","G","B","E"];
+  for (let s = 0; s < 6; s++) {
+    el("line", { x1:STR_X(s), x2:STR_X(s), y1:Y0-6, y2:FRET_Y(FRETS), stroke:"#8a8c98", "stroke-width":1+(5-s)*0.4 }, svg);
+    el("text", { x:STR_X(s), y:24, fill:"#8a8c98", "font-size":12, "text-anchor":"middle" }, svg).textContent = names[s];
+    el("text", { id:"mark"+s, x:STR_X(s), y:Y0-14, fill:"#4caf7a", "font-size":16, "text-anchor":"middle" }, svg);
+  }
+  for (let s = 0; s < 6; s++) {
+    el("circle", { id:"dot"+s, class:"dot", cx:STR_X(s), cy:Y0, r:14, fill:"#e0523c", opacity:0 }, svg);
+    el("text", { id:"fin"+s, x:STR_X(s), y:Y0+5, fill:"#fff", "font-size":13, "font-weight":"bold", "text-anchor":"middle", opacity:0 }, svg);
+  }
+}
+function setDot(s, fret, finger) {
+  const dot = document.getElementById("dot"+s), fin = document.getElementById("fin"+s);
+  const cy = fret === 0 ? Y0 : FRET_Y(fret) - Y_GAP/2;
+  dot.setAttribute("cx", STR_X(s)); dot.setAttribute("cy", cy); dot.setAttribute("r", 14);
+  dot.setAttribute("opacity", 1); dot.setAttribute("class", "dot");
+  fin.setAttribute("x", STR_X(s)); fin.setAttribute("y", cy+5); fin.setAttribute("opacity", 1);
+  fin.textContent = finger ?? "";
+}
+function clearBoard() {
+  for (let s = 0; s < 6; s++) {
+    const d = document.getElementById("dot"+s);
+    d.setAttribute("opacity", 0); d.setAttribute("class", "dot"); d.classList.remove("pulse");
+    document.getElementById("fin"+s).setAttribute("opacity", 0);
+    const mk = document.getElementById("mark"+s); mk.textContent = ""; 
+  }
+}
+let currentChord = "E5", animTimer = null;
+function showChord(name) {
+  const c = CHORDS[name]; if (!c) return;
+  currentChord = name; clearBoard();
+  for (let s = 0; s < 6; s++) {
+    const f = c.frets[s], mk = document.getElementById("mark"+s);
+    if (f === null) { mk.textContent = "X"; mk.setAttribute("fill", "#8a8c98"); continue; }
+    if (f === 0) { mk.textContent = "O"; mk.setAttribute("fill", "#4caf7a"); continue; }
+    setDot(s, f, c.fingers[s]);
+    document.getElementById("dot"+s).classList.add("pulse");
+  }
+  document.getElementById("chordInfo").textContent = `${name}: ${c.frets.map(f => f===null?"X":f).join(" ")}`;
+  document.getElementById("targetName").textContent = name;
+  document.getElementById("chordSelect").value = name;
+  document.getElementById("handTip").textContent = handTip(name);
+  updateHand(name);
+}
+/* ---------- SCHEMA MÂNEI ---------- */
+const FINGER_COLORS = { 1: "#e0523c", 2: "#e88a3c", 3: "#4caf7a", 4: "#4a8fd8" };
+const HY = f => f === 0 ? 18 : 18 + f * 22;          // rând pentru fiecare fret
+function drawHand() {
+  const h = document.getElementById("handSvg");
+  h.innerHTML = "";
+  for (let s = 0; s < 6; s++) el("line", { x1:STR_X(s), x2:STR_X(s), y1:18, y2:HY(5), stroke:"#3a3c46", "stroke-width":1.5 }, h);
+  for (let f = 1; f <= 5; f++) el("line", { x1:STR_X(0)-8, x2:STR_X(5)+8, y1:HY(f), y2:HY(f), stroke:"#3a3c46", "stroke-width":1 }, h);
+  for (let k = 1; k <= 4; k++) {
+    const g = el("circle", { id:"hf"+k, r:12, fill:FINGER_COLORS[k], opacity:0 }, h);
+    g.style.transition = "cx 0.4s ease, cy 0.4s ease, opacity 0.3s ease";
+    const tx = el("text", { id:"hft"+k, "font-size":13, "font-weight":"bold", fill:"#fff", "text-anchor":"middle", opacity:0 }, h);
+    tx.style.transition = "x 0.4s ease, y 0.4s ease, opacity 0.3s ease";
+    tx.textContent = k;
+  }
+  const th = el("circle", { id:"hth", r:12, fill:"#8a8c98", cx:300, cy:138 }, h);
+  el("text", { x:300, y:143, "font-size":12, "font-weight":"bold", fill:"#15161a", "text-anchor":"middle" }, h).textContent = "P";
+  el("text", { x:330, y:143, fill:"#8a8c98", "font-size":11 }, h).textContent = "pouce, în spatele gâtului";
+}
+function updateHand(name) {
+  const c = CHORDS[name];
+  for (let k = 1; k <= 4; k++) {
+    const g = document.getElementById("hf"+k), tx = document.getElementById("hft"+k);
+    const s = c.fingers.indexOf(k);
+    if (s === -1) { g.style.opacity = 0; tx.style.opacity = 0; continue; }
+    const f = c.frets[s];
+    const cx = STR_X(s), cy = HY(f) - 11;
+    g.style.cx = cx + "px"; g.style.cy = cy + "px"; g.style.opacity = 1;
+    tx.style.x = cx + "px"; tx.style.y = (cy + 5) + "px"; tx.style.opacity = 1;
+    // Degetul "coboară" pe coardă: reluăm animația la fiecare schimbare de acord
+    setTimeout(() => {
+      for (const node of [g, tx]) {
+        node.classList.remove("press");
+        void node.getBoundingClientRect();
+        node.classList.add("press");
+      }
+    }, 400);
+  }
+}
+
+function playStepByStep() {
+  const c = CHORDS[currentChord];
+  clearInterval(animTimer); clearBoard();
+  let s = 0;
+  animTimer = setInterval(() => {
+    if (s >= 6) { clearInterval(animTimer); showChord(currentChord); return; }
+    const f = c.frets[s], mk = document.getElementById("mark"+s);
+    if (f === null) { mk.textContent = "X"; mk.setAttribute("fill", "#8a8c98"); }
+    else if (f === 0) { mk.textContent = "O"; mk.setAttribute("fill", "#4caf7a"); }
+    else setDot(s, f, c.fingers[s]);
+    s++;
+  }, 500);
+}
+
+/* Poziția mâinii pentru fiecare acord: ce deget unde, plus sfatul general */
+const HAND_TIPS = {
+  ro: {
+    general: "Police-ul în spatele gâtului, cotul relaxat, încheietura dreaptă. Apasă cu vârful degetului, aproape de bară, nu la mijlocul distanței.",
+    E5: "Index pe fretul 2, pe corzile A și D (barré pe două corzi). Corzile E gros și G nu se ating.",
+    A5: "Index pe fretul 2, pe corzile D și G (barré pe două corzi).",
+    D5: "Index pe G fretul 2, mijlociu pe B fretul 3.",
+    G5: "Index pe E gros fretul 3, inelar pe A fretul 5, mic pe D fretul 5.",
+    E: "Mijlociu pe A fretul 2, inelar pe D fretul 2, index pe G fretul 1.",
+    Em: "Mijlociu pe A fretul 2, inelar pe D fretul 2. Restul corzilor sunt libere.",
+    A: "Index pe D fretul 2, mijlociu pe G fretul 2, inelar pe B fretul 2.",
+    Am: "Index pe B fretul 1, mijlociu pe D fretul 2, inelar pe G fretul 2.",
+    D: "Index pe G fretul 2, mijlociu pe E subțire fretul 2, inelar pe B fretul 3.",
+    Dm: "Index pe E subțire fretul 1, mijlociu pe G fretul 2, inelar pe B fretul 3.",
+    G: "Inelar pe E gros fretul 3, mijlociu pe A fretul 2, mic pe E subțire fretul 3.",
+    C: "Inelar pe A fretul 3, mijlociu pe D fretul 2, index pe B fretul 1."
+  },
+  en: {
+    general: "Thumb behind the neck, relaxed elbow, straight wrist. Press with the fingertip, close to the fret wire.",
+    E5: "Index barred across fret 2 on the A and D strings. Don't let the low E or G strings ring.",
+    A5: "Index barred across fret 2 on the D and G strings.",
+    D5: "Index on G fret 2, middle on B fret 3.",
+    G5: "Index on low E fret 3, ring on A fret 5, pinky on D fret 5.",
+    E: "Middle on A fret 2, ring on D fret 2, index on G fret 1.",
+    Em: "Middle on A fret 2, ring on D fret 2. The other strings stay open.",
+    A: "Index on D fret 2, middle on G fret 2, ring on B fret 2.",
+    Am: "Index on B fret 1, middle on D fret 2, ring on G fret 2.",
+    D: "Index on G fret 2, middle on high E fret 2, ring on B fret 3.",
+    Dm: "Index on high E fret 1, middle on G fret 2, ring on B fret 3.",
+    G: "Ring on low E fret 3, middle on A fret 2, pinky on high E fret 3.",
+    C: "Ring on A fret 3, middle on D fret 2, index on B fret 1."
+  },
+  no: {
+    general: "Tommelen bak halsen, avslappet albue, rett håndledd. Trykk med fingertuppen, nær bundet.",
+    E5: "Pekefinger over bånd 2 på A- og D-strengene (barré over to strenger). Ikke la E- og G-strengene klinge.",
+    A5: "Pekefinger over bånd 2 på D- og G-strengene (barré over to strenger).",
+    D5: "Pekefinger på G bånd 2, langfinger på B bånd 3.",
+    G5: "Pekefinger på tykk E bånd 3, ringfinger på A bånd 5, lillefinger på D bånd 5.",
+    E: "Langfinger på A bånd 2, ringfinger på D bånd 2, pekefinger på G bånd 1.",
+    Em: "Langfinger på A bånd 2, ringfinger på D bånd 2. De andre strengene er åpne.",
+    A: "Pekefinger på D bånd 2, langfinger på G bånd 2, ringfinger på B bånd 2.",
+    Am: "Pekefinger på B bånd 1, langfinger på D bånd 2, ringfinger på G bånd 2.",
+    D: "Pekefinger på G bånd 2, langfinger på tynn E bånd 2, ringfinger på B bånd 3.",
+    Dm: "Pekefinger på tynn E bånd 1, langfinger på G bånd 2, ringfinger på B bånd 3.",
+    G: "Ringfinger på tykk E bånd 3, langfinger på A bånd 2, lillefinger på tynn E bånd 3.",
+    C: "Ringfinger på A bånd 3, langfinger på D bånd 2, pekefinger på B bånd 1."
+  }
+};
+function handTip(chord) {
+  const L = HAND_TIPS[LANG] || HAND_TIPS.ro;
+  return `${L[chord] || ""} ${L.general}`;
+}
+
+const select = document.getElementById("chordSelect");
+Object.keys(CHORDS).forEach(n => { const o = document.createElement("option"); o.value = o.textContent = n; select.appendChild(o); });
+select.addEventListener("change", () => showChord(select.value));
+document.getElementById("playChordBtn").addEventListener("click", playStepByStep);
+
+/* ---------- AUDIO (demo + metronom) ---------- */
+let audioCtx = null;
+const getCtx = () => {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === "suspended") audioCtx.resume();   // Safari/iOS pornesc sunetul suspendat
+  return audioCtx;
+};
+const OPEN_HZ = [82.41, 110.00, 146.83, 196.00, 246.94, 329.63];
+const OPEN_PC = [4, 9, 2, 7, 11, 4];
+const PC_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+
+function playDemo(chordName = currentChord) {
+  const ctx = getCtx(), c = CHORDS[chordName], now = ctx.currentTime;
+  c.frets.forEach((f, s) => {
+    if (f === null) return;
+    const t0 = now + s * 0.03;
+    const osc = ctx.createOscillator(), filt = ctx.createBiquadFilter(), g = ctx.createGain();
+    osc.type = "sawtooth"; osc.frequency.value = OPEN_HZ[s] * Math.pow(2, f/12);
+    filt.type = "lowpass"; filt.frequency.value = 1800;
+    g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(0.12, t0+0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, t0+1.5);
+    osc.connect(filt); filt.connect(g); g.connect(ctx.destination);
+    osc.start(t0); osc.stop(t0+1.6);
+  });
+}
+document.getElementById("demoBtn").addEventListener("click", () => playDemo());
+
+let metroTimer = null, beatIndex = 0;
+const BEATS = 4;
+const beatsEl = document.getElementById("beats");
+for (let i = 0; i < BEATS; i++) { const b = document.createElement("div"); b.className = "beat" + (i===0?" first":""); beatsEl.appendChild(b); }
+function click(accent) {
+  const ctx = getCtx(), osc = ctx.createOscillator(), g = ctx.createGain();
+  osc.frequency.value = accent ? 1200 : 800;
+  g.gain.setValueAtTime(0.3, ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.05);
+  osc.connect(g); g.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime+0.05);
+}
+function tick() {
+  const beats = beatsEl.children;
+  for (const b of beats) b.classList.remove("on");
+  beats[beatIndex].classList.add("on");
+  click(beatIndex === 0);
+  beatIndex = (beatIndex + 1) % BEATS;
+}
+function toggleMetro() {
+  const btn = document.getElementById("metroToggle");
+  if (metroTimer) {
+    clearInterval(metroTimer); metroTimer = null;
+    for (const b of beatsEl.children) b.classList.remove("on");
+    btn.textContent = t("metroStart"); return;
+  }
+  const bpm = Math.min(220, Math.max(30, parseInt(document.getElementById("bpm").value, 10) || 60));
+  beatIndex = 0; tick();
+  metroTimer = setInterval(tick, 60000 / bpm);
+  btn.textContent = t("metroStop");
+}
+document.getElementById("metroToggle").addEventListener("click", toggleMetro);
+
+/* ---------- DETECTIE LIVE (estimare) ---------- */
+const barEls = [], barsEl = document.getElementById("bars"), labelsEl = document.getElementById("barLabels");
+PC_NAMES.forEach(n => {
+  const wrap = document.createElement("div");
+  wrap.style.cssText = "height:100%;display:flex;align-items:flex-end;background:#15161a;border-radius:4px";
+  const bar = document.createElement("div");
+  bar.style.cssText = "width:100%;height:0%;background:#3a3c46;border-radius:4px;transition:height 0.15s";
+  wrap.appendChild(bar); barsEl.appendChild(wrap); barEls.push(bar);
+  const lab = document.createElement("span"); lab.textContent = n; labelsEl.appendChild(lab);
+});
+let micStream = null, micCtx = null, analyser = null, detectTimer = null;
+
+function targetPCs(chord) {
+  const set = new Set();
+  CHORDS[chord].frets.forEach((f, s) => { if (f !== null) set.add((OPEN_PC[s] + f) % 12); });
+  return set;
+}
+// Returns { level, ok, missing, wrong, norm } for the given chord, based on the current frame
+function measure(chord) {
+  const td = new Float32Array(analyser.fftSize);
+  analyser.getFloatTimeDomainData(td);
+  let rms = 0; for (const v of td) rms += v*v; rms = Math.sqrt(rms / td.length);
+  if (rms < 0.01) return { level: false };
+  const n = analyser.frequencyBinCount, db = new Float32Array(n);
+  analyser.getFloatFrequencyData(db);
+  const binHz = micCtx.sampleRate / analyser.fftSize;
+  const chroma = new Array(12).fill(0);
+  for (let k = 1; k < n; k++) {
+    const f = k * binHz;
+    if (f < 70 || f > 1200) continue;
+    const pc = ((Math.round(12 * Math.log2(f/440)) + 69) % 12 + 12) % 12;
+    const lin = Math.pow(10, db[k]/20); chroma[pc] += lin*lin;
+  }
+  const max = Math.max(...chroma) || 1;
+  const norm = chroma.map(v => v / max);
+  const exp = targetPCs(chord);
+  const missing = [...exp].filter(pc => norm[pc] < 0.35);
+  const wrong = [...Array(12).keys()].filter(pc => !exp.has(pc) && norm[pc] >= 0.75);
+  return { level: true, ok: missing.length === 0 && wrong.length === 0, missing, wrong, norm, exp };
+}
+
+let okStreak = 0;
+function analyse() {
+  const status = document.getElementById("status");
+  const m = measure(currentChord);
+  setInputIndicator(m.level);
+  drawSignal(m);
+  if (!m.level) {
+    okStreak = 0; barEls.forEach(b => b.style.height = "0%");
+    status.textContent = t("noSound"); status.style.color = "var(--muted)"; return;
+  }
+  m.norm.forEach((v, pc) => {
+    barEls[pc].style.height = Math.round(v*100) + "%";
+    barEls[pc].style.background = m.exp.has(pc) ? "#4caf7a" : (m.wrong.includes(pc) ? "#e0523c" : "#3a3c46");
+  });
+  okStreak = m.ok ? okStreak + 1 : 0;
+  if (okStreak >= 5) { status.textContent = t("correct", {c: currentChord}); status.style.color = "var(--ok)"; }
+  else if (m.missing.length) { status.textContent = t("missing", {n: m.missing.map(p => PC_NAMES[p]).join(", ")}); status.style.color = "var(--accent)"; }
+  else { status.textContent = t("extra", {n: m.wrong.map(p => PC_NAMES[p]).join(", ")}); status.style.color = "var(--accent)"; }
+}
+
+function setInputIndicator(active) {
+  document.getElementById("inputDot").style.background = active ? "#4caf7a" : "#3a3c46";
+  document.getElementById("inputText").textContent = active ? t("inputOn") : t("noInput");
+}
+async function startMic() {
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation:false, noiseSuppression:false, autoGainControl:false } });
+    micCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = micCtx.createMediaStreamSource(micStream);
+    analyser = micCtx.createAnalyser(); analyser.fftSize = 16384; analyser.smoothingTimeConstant = 0.5;
+    src.connect(analyser);
+    detectTimer = setInterval(analyse, 150);
+    document.getElementById("micBtn").textContent = t("micOff");
+  } catch (e) {
+    const why = !navigator.mediaDevices ? "navigator.mediaDevices indisponibil (pagina nu e pe localhost sau HTTPS)" : `${e.name}: ${e.message}`;
+    document.getElementById("status").textContent = t("micErr") + " (" + why + ")";
+    document.getElementById("status").style.color = "var(--accent)";
+    alert(t("micErr") + "\n\n" + why);
+  }
+}
+function stopMic() {
+  clearInterval(detectTimer); detectTimer = null;
+  if (micStream) micStream.getTracks().forEach(tr => tr.stop());
+  if (micCtx) micCtx.close();
+  micStream = null; micCtx = null; analyser = null; okStreak = 0;
+  barEls.forEach(b => b.style.height = "0%");
+  document.getElementById("status").textContent = "";
+  setInputIndicator(false);
+  drawSignal({ level: false });
+  document.getElementById("micBtn").textContent = t("mic");
+}
+document.getElementById("micBtn").addEventListener("click", () => { if (detectTimer) stopMic(); else startMic(); });
+
+/* Semnalul primit de la chitară, afișat pe grif cu albastru: fiecare notă detectată apare
+   pe toate pozițiile ei de pe grif (frete 0–5), cu intensitatea după volum */
+function drawSignal(m) {
+  let g = document.getElementById("sigGroup");
+  if (!g) g = el("g", { id: "sigGroup" }, svg);
+  while (g.firstChild) g.removeChild(g.firstChild);
+  if (!m.level) return;
+  for (let pc = 0; pc < 12; pc++) {
+    if (m.norm[pc] < 0.35) continue;
+    for (let s = 0; s < 6; s++) {
+      const f = (pc - OPEN_PC[s] + 12) % 12;
+      if (f > FRETS) continue;
+      const cx = STR_X(s), cy = f === 0 ? Y0 : FRET_Y(f) - Y_GAP / 2;
+      el("circle", { cx, cy, r: 7, fill: "#4a8fd8", opacity: (0.3 + 0.6 * m.norm[pc]).toFixed(2) }, g);
+    }
+  }
+}
+
+/* Verificare live a unui exercițiu: demo, apoi ascultare ~3 secunde */
+async function verifyExercise(seq, btn, done) {
+  if (!seq || !seq.length) return;
+  if (!detectTimer) await startMic();
+  if (!analyser) return;
+  btn.disabled = true;
+  let allPass = true;
+  // Fiecare acord din secvență: demo, apoi ascultare ~3 secunde
+  for (const chord of seq) {
+    btn.textContent = t("verifying") + " " + chord;
+    showChord(chord);
+    playDemo(chord);
+    await new Promise(r => setTimeout(r, 1500));
+    let good = 0, total = 0;
+    const end = Date.now() + 3000;
+    while (Date.now() < end) {
+      await new Promise(r => setTimeout(r, 150));
+      const m = measure(chord); total++;
+      if (m.level && m.ok) good++;
+    }
+    if (!(total > 0 && good / total >= 0.6)) allPass = false;
+  }
+  btn.disabled = false;
+  btn.textContent = allPass ? t("verified") : t("notVerified");
+  if (allPass) done();
+}
+
+/* ---------- TRASEU ---------- */
+const STAGE_ITEMS = [ [0,1,2,3], [4,5,6], [7,8,9], [10,11], [12,13,14], [15,16,17] ];   // indexurile din T[lang].items
+const STORE = "gt-progress-v3";
+let progress = JSON.parse(localStorage.getItem(STORE) || "{}");
+
+function renderExercises() {
+  const root = document.getElementById("exercises"); root.innerHTML = "";
+  const items = T[LANG].items;
+  T[LANG].stages.forEach((stageName, si) => {
+    const h = document.createElement("div");
+    h.className = "muted"; h.style.margin = "10px 0 4px"; h.textContent = stageName; root.appendChild(h);
+    STAGE_ITEMS[si].forEach(ii => {
+      const [txt, chord] = items[ii];
+      const key = `${si}-${ii}`;
+      const row = document.createElement("div");
+      row.className = "ex" + (progress[key] ? " done" : "");
+      const cb = document.createElement("input");
+      cb.type = "checkbox"; cb.checked = !!progress[key];
+      const span = document.createElement("span"); span.className = "txt"; span.style.flex = "1"; span.textContent = txt;
+      row.append(cb, span);
+      const markDone = () => { progress[key] = true; cb.checked = true; row.classList.add("done"); saveProgress(); };
+      cb.addEventListener("change", () => { progress[key] = cb.checked; row.classList.toggle("done", cb.checked); saveProgress(); });
+      const seq = SEQ[key] || (chord ? [chord] : null);
+      if (seq) {
+        const sb = document.createElement("button");
+        sb.textContent = t("show");
+        const bpmM = txt.match(/(\d+)\s*BPM/i);
+        const beatM = txt.match(/(\d+)\s*(bătăi|beats|slag)/i);
+        sb.addEventListener("click", () => playSequence(seq, bpmM ? +bpmM[1] : null, beatM ? beatM[1] : null));
+        row.append(sb);
+      }
+      if (seq) {
+        const vb = document.createElement("button");
+        vb.textContent = t("verify");
+        vb.addEventListener("click", () => verifyExercise(seq, vb, markDone));
+        row.appendChild(vb);
+      }
+      root.appendChild(row);
+    });
+  });
+}
+function saveProgress() { localStorage.setItem(STORE, JSON.stringify(progress)); updateProgress(); }
+function updateProgress() {
+  const total = Object.values(STAGE_ITEMS).reduce((a, arr) => a + arr.length, 0);
+  const done = Object.values(progress).filter(Boolean).length;
+  const pct = Math.round(done / total * 100);
+  document.getElementById("progressBar").style.width = pct + "%";
+  document.getElementById("progressText").textContent = t("progress", {d: done, t: total, p: pct});
+}
+document.getElementById("exportBtn").addEventListener("click", () => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(progress, null, 2)], { type:"application/json" }));
+  a.download = "progres-chitara.json"; a.click();
+});
+document.getElementById("importBtn").addEventListener("click", () => {
+  const input = document.createElement("input"); input.type = "file"; input.accept = "application/json";
+  input.addEventListener("change", async () => {
+    try { progress = JSON.parse(await input.files[0].text()); saveProgress(); renderExercises(); }
+    catch { alert(t("invalid")); }
+  });
+  input.click();
+});
+document.getElementById("resetBtn").addEventListener("click", () => {
+  if (!confirm(t("resetConfirm"))) return;
+  progress = {}; saveProgress(); renderExercises();
+});
+
+/* Secvențe pentru exercițiile cu mai multe acorduri (cheie: etapa-index) */
+const SEQ = {
+  "0-2": ["E5", "A5", "D5", "G5"],
+  "0-3": ["E5", "A5", "D5", "G5"],
+  "1-5": ["E5", "E5"],
+  "1-6": ["E5", "A5", "E5", "D5"],
+  "2-7": ["Em", "Am", "E", "A"],
+  "2-8": ["D", "Dm", "G", "C"],
+  "2-9": ["G", "C"],
+  "3-10": ["E5", "A5", "D5", "G5"],
+  "4-12": ["E5", "E5"],
+  "4-13": ["E5", "A5", "E5", "D5"],
+  "4-14": ["G5", "D5", "A5", "E5"],
+  "5-15": ["Am", "Em", "G", "C"],
+  "5-16": ["E", "A", "D", "E"],
+  "5-17": ["E5", "A5", "E5", "D5"]
+};
+
+/* Animația de la început, pentru fiecare acord din secvență: degetele se pun pe rând,
+   cu sunetul demo și mâna actualizată, apoi trecem la următorul acord */
+let seqTimer = null;
+function playSequence(seq, bpm = null, beats = null) {
+  clearTimeout(seqTimer);
+  clearInterval(animTimer);
+  // Ducem vizorul la griful, ca să vezi animația
+  document.getElementById("fretboard").scrollIntoView({ behavior: "smooth", block: "center" });
+  // Metronomul la tempo-ul exercițiului, ca să auzi ritmul
+  if (bpm) {
+    document.getElementById("bpm").value = bpm;
+    if (metroTimer) toggleMetro();   // oprește ce rula
+    toggleMetro();                   // pornește la noul tempo
+  }
+  // Ce trebuie să cânți: acorduri, bătăi, BPM
+  const status = document.getElementById("status");
+  status.style.color = "var(--muted)";
+  status.textContent = `${seq.join(" → ")}${beats ? "  ·  " + beats + " bătăi" : ""}${bpm ? "  ·  " + bpm + " BPM" : ""}`;
+
+  const period = bpm ? Math.round(4 * 60000 / bpm) : 4000;   // 4 bătăi pe acord
+  // Repetă secvența până la 1 minut, ca să prinzi ritmul; un nou clic pe „Arată” o oprește și o repornește
+  const LOOP_MS = 60000;
+  const startedAt = Date.now();
+  let i = 0;
+  const step = () => {
+    showChord(seq[i]);
+    playDemo(seq[i]);
+    playStepByStep();
+    i++;
+    if (i >= seq.length) {
+      if (Date.now() - startedAt + period <= LOOP_MS) i = 0;        // mai facem o rundă
+      else {                                                       // gata: oprim metronomul după ultimul acord
+        if (bpm) seqTimer = setTimeout(() => { if (metroTimer) toggleMetro(); }, period);
+        return;
+      }
+    }
+    seqTimer = setTimeout(step, period);
+  };
+  step();
+}
+
+/* ---------- PIESELE TALE ---------- */
+const SONG_STORE = "gt-songs-v3";
+let songs = JSON.parse(localStorage.getItem(SONG_STORE) || "[]");
+function saveSongs() { localStorage.setItem(SONG_STORE, JSON.stringify(songs)); renderSongs(); }
+function renderSongs() {
+  const root = document.getElementById("songList"); root.innerHTML = "";
+  songs.forEach((song, idx) => {
+    const wrap = document.createElement("div"); wrap.className = "ex";
+    const name = document.createElement("span"); name.style.flex = "1";
+    name.textContent = `${song.name}: ${song.chords.join(" ")}`;
+    const play = document.createElement("button"); play.textContent = t("show");
+    play.addEventListener("click", () => playSong(song.chords));
+    const del = document.createElement("button"); del.textContent = t("del");
+    del.addEventListener("click", () => { songs.splice(idx, 1); saveSongs(); });
+    wrap.append(name, play, del); root.appendChild(wrap);
+  });
+}
+let songTimer = null;
+function playSong(chords) {
+  clearTimeout(songTimer);
+  let i = 0;
+  const step = () => {
+    showChord(chords[i]); playDemo(chords[i]); i++;
+    if (i < chords.length) songTimer = setTimeout(step, 1500);
+  };
+  step();
+}
+document.getElementById("saveSongBtn").addEventListener("click", () => {
+  const name = document.getElementById("songName").value.trim();
+  const raw = document.getElementById("songChords").value.trim();
+  if (!name || !raw) return;
+  const chords = raw.split(/\s+/);
+  const unknown = chords.filter(c => !CHORDS[c]);
+  if (unknown.length) { alert(t("unknown", {u: unknown.join(", ")})); return; }
+  songs.push({ name, chords });
+  document.getElementById("songName").value = ""; document.getElementById("songChords").value = "";
+  saveSongs();
+});
+
+/* ---------- SESIUNI ----------
+   Fiecare sesiune folosește exerciții deja existente (cheile din SEQ / traseu).
+   Sesiunea următoare se deschide după ce ai bifat încălzirea, tehnica și progresia. */
+/* Tempo crescător: fiecare sesiune începe cu 5 BPM peste precedenta.
+   Încălzire = tempo de bază, tehnică = +5, progresie = +10. */
+const SESSIONS = [
+  { warm: { desc: "E5 · 60 BPM", seq: ["E5"] },
+    tech: { desc: "E5 · G5 · 65 BPM", seq: ["E5", "G5"] },
+    prog: { desc: "E5 · E5 · G5 · A5 · 70 BPM", seq: ["E5", "E5", "G5", "A5"] } },
+  { warm: { desc: "E5 · E5 · 65 BPM", seq: ["E5", "E5"] },
+    tech: { desc: "E5 · E5 · G5 · A5 · 70 BPM", seq: ["E5", "E5", "G5", "A5"] },
+    prog: { desc: "E5 · E5 · G5 · A5 · 75 BPM", seq: ["E5", "E5", "G5", "A5"] } },
+  { warm: { desc: "E5 · A5 · 70 BPM", seq: ["E5", "A5"] },
+    tech: { desc: "E5 · E5 · G5 · A5 · 75 BPM", seq: ["E5", "E5", "G5", "A5"] },
+    prog: { desc: "E5 · E5 · G5 · A5 · 80 BPM", seq: ["E5", "E5", "G5", "A5"] } },
+  { warm: { desc: "E5 · E5 · G5 · A5 · 75 BPM", seq: ["E5", "E5", "G5", "A5"] },
+    tech: { desc: "E5 · E5 · G5 · A5 · D5 · 80 BPM", seq: ["E5", "E5", "G5", "A5", "D5"] },
+    prog: { desc: "E5 · E5 · G5 · A5 · D5 · 85 BPM", seq: ["E5", "E5", "G5", "A5", "D5"] } },
+  { warm: { desc: "A5 · E5 · 80 BPM", seq: ["A5", "E5"] },
+    tech: { desc: "E5 · E5 · G5 · A5 · D5 · 85 BPM", seq: ["E5", "E5", "G5", "A5", "D5"] },
+    prog: { desc: "E5 · E5 · G5 · A5 · D5 · 90 BPM", seq: ["E5", "E5", "G5", "A5", "D5"] } }
+];
+const SESS_LABELS = {
+  ro: { title: "Sesiuni", session: "Sesiunea", warm: "Încălzire", tech: "Tehnică", prog: "Progresie", note: "Notă de final", notePh: "Ce a fost greu azi?", save: "Salvează", free: "Mod liber: deschide toate sesiunile", locked: "Termină sesiunea anterioară ca s-o deschizi.", done: "Sesiune completă" },
+  en: { title: "Sessions", session: "Session", warm: "Warm-up", tech: "Technique", prog: "Progression", note: "End note", notePh: "What was hard today?", save: "Save", free: "Free mode: open all sessions", locked: "Finish the previous session to unlock it.", done: "Session complete" },
+  no: { title: "Økter", session: "Økt", warm: "Oppvarming", tech: "Teknikk", prog: "Progresjon", note: "Sluttnotat", notePh: "Hva var vanskelig i dag?", save: "Lagre", free: "Fri modus: åpne alle økter", locked: "Fullfør forrige økt for å låse opp denne.", done: "Økt fullført" }
+};
+const SESS_STORE = "gt-sessions-v5";
+let sessData = JSON.parse(localStorage.getItem(SESS_STORE) || "[]");
+let FREE_MODE = localStorage.getItem("gt-free") === "1";
+
+function persistSessions() { localStorage.setItem(SESS_STORE, JSON.stringify(sessData)); }
+
+function renderSessions() {
+  const L = SESS_LABELS[LANG] || SESS_LABELS.ro;
+  document.getElementById("t_sessions").textContent = L.title;
+  const root = document.getElementById("sessions"); root.innerHTML = "";
+  const items = T[LANG].items;
+
+  const fr = document.createElement("label");
+  fr.className = "muted"; fr.style.display = "block"; fr.style.marginBottom = "8px";
+  const fcb = document.createElement("input");
+  fcb.type = "checkbox"; fcb.checked = FREE_MODE; fcb.style.marginRight = "6px";
+  fcb.addEventListener("change", () => {
+    FREE_MODE = fcb.checked;
+    localStorage.setItem("gt-free", FREE_MODE ? "1" : "0");
+    renderSessions();
+  });
+  fr.append(fcb, document.createTextNode(L.free));
+  root.appendChild(fr);
+
+  SESSIONS.forEach((s, i) => {
+    sessData[i] = sessData[i] || {};
+    const d = sessData[i];
+    const complete = ["warm", "tech", "prog"].every(k => d[k]);
+    d.done = complete;
+    const prevDone = FREE_MODE || i === 0 || (sessData[i-1] && sessData[i-1].done);
+
+    const head = document.createElement("div");
+    head.className = "muted"; head.style.margin = "12px 0 4px";
+    head.textContent = `${L.session} ${i+1}` + (complete ? " · " + L.done : "");
+    root.appendChild(head);
+
+    if (!prevDone) {
+      const p = document.createElement("p"); p.className = "muted"; p.textContent = L.locked;
+      root.appendChild(p); return;
+    }
+
+    ["warm", "tech", "prog"].forEach(k => {
+      const txt = s[k].desc;
+      const seq = s[k].seq;
+      const row = document.createElement("div"); row.className = "ex";
+      const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !!d[k];
+      const span = document.createElement("span"); span.style.flex = "1";
+      span.textContent = `${L[k]}: ${txt}`;
+      row.append(cb, span);
+      cb.addEventListener("change", () => { d[k] = cb.checked; persistSessions(); renderSessions(); });
+      if (seq) {
+        const bpmM = txt.match(/(\d+)\s*BPM/i);
+        const beatM = txt.match(/(\d+)\s*(bătăi|beats|slag)/i);
+        const sb = document.createElement("button"); sb.textContent = T[LANG].show || "Arată";
+        sb.addEventListener("click", () => playSequence(seq, bpmM ? +bpmM[1] : null, beatM ? beatM[1] : null));
+        const vb = document.createElement("button"); vb.textContent = T[LANG].verify;
+        vb.addEventListener("click", () => verifyExercise(seq, vb, () => { d[k] = true; persistSessions(); renderSessions(); }));
+        row.append(sb, vb);
+      }
+      root.appendChild(row);
+    });
+
+    const noteRow = document.createElement("div"); noteRow.style.marginTop = "8px";
+    const ta = document.createElement("textarea");
+    ta.placeholder = L.notePh; ta.value = d.note || ""; ta.rows = 2;
+    ta.style.cssText = "width:100%;background:#15161a;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px";
+    const saveB = document.createElement("button"); saveB.textContent = L.save; saveB.style.marginTop = "6px";
+    saveB.addEventListener("click", () => { d.note = ta.value; persistSessions(); });
+    noteRow.append(ta, saveB);
+    root.appendChild(noteRow);
+  });
+  persistSessions();
+}
+
+/* ---------- RITMUL TAU ----------
+   Un ciclu de 8 bătăi: unu, doi, trei, patru, unu, (tăcere), trei, patru.
+   Pe fiecare bătaie care are acord, se cântă acordul; altfel, doar metronomul. */
+const PATTERN = ["E5", "E5", "E5", "E5", "E5", null, "E5", "E5"];
+const PATTERN_BPM = 60;
+let patternTimer = null;
+
+function togglePattern() {
+  const btn = document.getElementById("patternBtn");
+  const info = document.getElementById("patternInfo");
+  if (patternTimer) {
+    clearInterval(patternTimer); patternTimer = null;
+    btn.textContent = "Arată ritmul";
+    info.textContent = "";
+    return;
+  }
+  if (metroTimer) toggleMetro();   // metronomul intern nu rulează în paralel
+  let i = 0;
+  const beatMs = 60000 / PATTERN_BPM;
+  const startedAt = Date.now();
+  const tickPattern = () => {
+    const idx = i % PATTERN.length;
+    click(idx === 0);                                   // bătaia 1 e accentuată
+    if (PATTERN[idx]) { showChord(PATTERN[idx]); playDemo(PATTERN[idx]); }
+    info.textContent = `${idx + 1} / ${PATTERN.length}` + (PATTERN[idx] ? "  ·  cântă " + PATTERN[idx] : "  ·  pauză");
+    i++;
+    if (Date.now() - startedAt > 60000) togglePattern();   // oprește după 1 minut
+  };
+  tickPattern();
+  patternTimer = setInterval(tickPattern, beatMs);
+  btn.textContent = "Oprește";
+}
+document.getElementById("patternBtn").addEventListener("click", togglePattern);
+
+/* ---------- LIMBA ---------- */
+const UI_LABELS = {
+  title: "title", t_fret: "fret", playChordBtn: "playAnim", demoBtn: "demo", t_fretHelp: "fretHelp",
+  t_check: "check", t_target: "target", t_checkNote: "checkNote", t_metro: "metro", t_bpm: "bpm", t_metroNote: "metroNote",
+  t_path: "path", exportBtn: "exportB", importBtn: "importB", resetBtn: "resetB",
+  t_songs: "songs", t_songsNote: "songsNote", saveSongBtn: "save"
+};
+const PLACEHOLDERS = { songName: "songName", songChords: "songChords" };
+
+function applyLang() {
+  document.documentElement.lang = LANG;
+  document.getElementById("langSelect").value = LANG;
+  document.title = t("title");
+  for (const id in UI_LABELS) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    if (id === "title") el.textContent = t("title");
+    else el.textContent = t(UI_LABELS[id]);
+  }
+  for (const id in PLACEHOLDERS) document.getElementById(id).placeholder = t(PLACEHOLDERS[id]);
+  document.getElementById("micBtn").textContent = detectTimer ? t("micOff") : t("mic");
+  document.getElementById("metroToggle").textContent = metroTimer ? t("metroStop") : t("metroStart");
+  setInputIndicator(false);
+  document.getElementById("inputText").textContent = t("noInput");
+  renderExercises(); updateProgress(); renderSongs(); renderSessions();
+}
+
+document.getElementById("langSelect").addEventListener("change", e => {
+  LANG = e.target.value; localStorage.setItem("gt-lang", LANG); applyLang();
+});
+
+/* Etichete pentru metronom (fără cheie separată, ca să rămână scurt) */
+T.ro.metroStart = "Start"; T.ro.metroStop = "Stop";
+T.en.metroStart = "Start"; T.en.metroStop = "Stop";
+T.no.metroStart = "Start"; T.no.metroStop = "Stopp";
+
+drawBoard();
+drawHand();
+showChord("E5");
+applyLang();
+</script>
+</body>
+</html>
